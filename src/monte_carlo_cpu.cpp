@@ -6,11 +6,12 @@
 #include <iostream>
 #include <array>
 #include <algorithm>
+#include <fstream>
 #include <iomanip>
 #include <utils/xoshiro256ss.hpp>
 
 constexpr int NUM_PATHS = 10'000;
-constexpr int STEPS_PER_DAY = 4;
+constexpr int STEPS_PER_DAY = 100;
 constexpr int TRADING_DAYS = 252;
 constexpr int TOTAL_STEPS = STEPS_PER_DAY * TRADING_DAYS;
 
@@ -21,8 +22,8 @@ struct SimulationParams {
     double initial_price;
     double volatility;
     double risk_free_rate;
-    int steps;
-    double delta_t;
+    int steps; // More steps -> better time resolution
+    double delta_t; // Time per step in years
     double strike_price; // Strike price for option pricing
 };
 
@@ -34,6 +35,17 @@ struct SimulationResults {
     double min_price;
     double option_price; // Expected value of call option
 };
+
+void write_simulated_prices_to_csv(const std::vector<double>& simulated_prices, const std::vector<double>& payoffs) {
+    std::ofstream out("./output/output.csv");
+    if (!out) {
+        std::cerr << "Failed to open output.csv\n";
+    }
+    out << "path,terminal_price,payoff\n";
+    for (size_t i = 0; i < simulated_prices.size(); ++i) {
+        out << i << "," << simulated_prices[i] << "," << payoffs[i] << "\n";
+    }
+}
 
 double simulate_path(const SimulationParams& params, xoshiro256ss& rng, std::normal_distribution<>& normal_dist) {
     double price = params.initial_price;
@@ -93,6 +105,8 @@ SimulationResults run_simulation(const SimulationParams& params) {
     results.option_price = std::exp(-params.risk_free_rate * time_to_maturity) * 
                           (total_payoff / NUM_PATHS);
     
+    write_simulated_prices_to_csv(simulated_prices, option_payoffs);
+
     return results;
 }
 
