@@ -23,5 +23,5 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 clear_output:
-	@mkdir -p $(OUTPUT)
+	mkdir -p $(OUTPUT)
 	find $(OUTPUT) -mindepth 1 -delete
