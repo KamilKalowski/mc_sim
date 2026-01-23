@@ -37,7 +37,7 @@ struct SimulationResults {
 };
 
 void write_simulated_prices_to_csv(const std::vector<double>& simulated_prices, const std::vector<double>& payoffs) {
-    std::ofstream out("./output/output.csv");
+    std::ofstream out("./output/final_price_payoffs_output.csv");
     if (!out) {
         std::cerr << "Failed to open output.csv\n";
     }
@@ -47,12 +47,15 @@ void write_simulated_prices_to_csv(const std::vector<double>& simulated_prices, 
     }
 }
 
-double simulate_path(const SimulationParams& params, xoshiro256ss& rng, std::normal_distribution<>& normal_dist) {
+double simulate_path(const SimulationParams& params, xoshiro256ss& rng, std::normal_distribution<>& normal_dist, std::ofstream* per_step_stream, int path) {
     double price = params.initial_price;
     for(int step = 0; step < params.steps; ++step) {
         double Z = normal_dist(rng);
         price *= std::exp((params.risk_free_rate - 0.5 * params.volatility * params.volatility) *
             params.delta_t + params.volatility * std::sqrt(params.delta_t) * Z);
+        if (per_step_stream && step % 50 == 0) {
+            *per_step_stream << path << "," << step << "," << price << "\n";
+        }
     }
     return price;
 }
@@ -61,12 +64,15 @@ SimulationResults run_simulation(const SimulationParams& params) {
     xoshiro256ss rng(std::random_device{}());
     std::normal_distribution<double> normal_dist(0.0, 1.0);
 
+    std::ofstream per_step_stream("output/per_path_price_output.csv");
+    per_step_stream << "path,step,price\n";
+
     std::vector<double> simulated_prices(NUM_PATHS);
     std::vector<double> option_payoffs(NUM_PATHS);
 
     // Run simulations
     for(int i = 0; i < NUM_PATHS; ++i) {
-        double final_price = simulate_path(params, rng, normal_dist);
+        double final_price = simulate_path(params, rng, normal_dist, &per_step_stream, i);
         simulated_prices[i] = final_price;
         option_payoffs[i] = std::max(final_price - params.strike_price, 0.0);
     }
