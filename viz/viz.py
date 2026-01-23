@@ -12,7 +12,7 @@ def load_subset(csv_path: str, keep_paths: int = 200, step_stride: int = 1, chun
         if not chunk.empty:
             parts.append(chunk)
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["path", "step", "price"])
-
+    
 
 df = load_subset("output/per_path_price_output.csv", keep_paths=200, step_stride=1, chunksize=200_000)
 

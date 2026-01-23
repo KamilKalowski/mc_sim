@@ -1,5 +1,9 @@
+OMP_CFLAGS  := -Xpreprocessor -fopenmp -I/usr/local/opt/libomp/include
+OMP_LDFLAGS := -L/usr/local/opt/libomp/lib -lomp
+
 CXX      := clang++
-CXXFLAGS := -std=c++17 -O2 -I.
+CXXFLAGS := -std=c++17 -O3 -ffast-math -march=native -I. $(OMP_CFLAGS)
+LDFLAGS  := $(OMP_LDFLAGS)
 
 SRC         := src/monte_carlo_cpu.cpp
 BUILD_DIR   := build
@@ -11,7 +15,7 @@ OUTPUT      := output
 all: $(TARGET)
 
 $(TARGET): $(SRC) utils/xoshiro256ss.hpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
