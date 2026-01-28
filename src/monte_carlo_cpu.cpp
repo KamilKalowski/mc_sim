@@ -35,7 +35,8 @@ struct SimulationResults {
     double var_95; // 95% value at risk
     double max_price;
     double min_price;
-    double option_price; // Expected value of call option
+    double option_price; // Expected value of call option (plain MC)
+    double option_price_cv; // Control variate adjusted price
 };
 
 struct PathResults {
@@ -54,7 +55,7 @@ void write_simulated_prices_to_csv(const std::vector<double>& simulated_prices, 
     }
 }
 
-SimulationResults calculate_statistics(const SimulationParams& params, std::vector<double>& simulated_prices, std::vector<double>& option_payoffs) {
+SimulationResults calculate_statistics(const SimulationParams& params, std::vector<double>& simulated_prices, std::vector<double>& option_payoffs, std::vector<double>& disc_payoffs) {
     // Calculate stats
     SimulationResults results; 
 
@@ -88,6 +89,27 @@ SimulationResults calculate_statistics(const SimulationParams& params, std::vect
     double time_to_maturity = params.steps * params.delta_t;
     results.option_price = std::exp(-params.risk_free_rate * time_to_maturity) * 
                           (total_payoff / NUM_PATHS);
+
+    // Control variate: X = discount_payoff, Y = terminal_price, E[Y] known analytically
+    results.option_price_cv = 0.0;
+    
+    double mean_X = std::accumulate(disc_payoffs.begin(), disc_payoffs.end(), 0.0) / NUM_PATHS;
+    double mean_Y = results.mean_price;
+    
+    double cov_XY = 0.0;
+    double var_Y = 0.0;
+    for (int i = 0; i < NUM_PATHS; ++i) {
+        double dy = simulated_prices[i] - mean_Y;
+        cov_XY += (disc_payoffs[i] - mean_X) * dy;
+        var_Y += dy * dy;
+    }
+    cov_XY /= NUM_PATHS;
+    var_Y /= NUM_PATHS;
+
+    double beta = (var_Y > 0.0) ? cov_XY / var_Y : 0.0;
+    const double expected_ST = params.initial_price * std::exp(params.risk_free_rate * time_to_maturity);
+    
+    results.option_price_cv = mean_X - beta * (mean_Y - expected_ST);
 
     return results;
 }
@@ -123,24 +145,28 @@ SimulationResults run_simulation(const SimulationParams& params) {
 
     std::vector<double> simulated_prices(NUM_PATHS);
     std::vector<double> option_payoffs(NUM_PATHS);
+    std::vector<double> disc_payoffs(NUM_PATHS);
 
     std::ofstream per_step_stream("output/per_path_price_output.csv");
     per_step_stream << "path,step,price\n";
     
     auto t0 = clock::now();
 
+    const double time_to_maturity = params.steps * params.delta_t;
+    const double discount = std::exp(-params.risk_free_rate * time_to_maturity);
+
     #pragma omp parallel
     {
         xoshiro256ss rng(std::random_device{}() + omp_get_thread_num());
         std::normal_distribution<double> normal_dist(0.0, 1.0);
 
-        auto t0 = clock::now();
         // Run simulations
         #pragma omp for
         for(int i = 0; i < NUM_PATHS; ++i) {
             auto path_result = simulate_path(params, rng, normal_dist, nullptr, i);
             simulated_prices[i] = path_result.terminal_avg;
             option_payoffs[i] = path_result.payoff_avg;
+            disc_payoffs[i] = discount * path_result.payoff_avg;
         }
     }
 
@@ -148,7 +174,7 @@ SimulationResults run_simulation(const SimulationParams& params) {
     auto time_elapsed_sim = std::chrono::duration_cast<std::chrono::milliseconds>(t1-t0).count();
     std::cout << "Time taken for a simulation: " << time_elapsed_sim << " ms\n"; 
 
-    SimulationResults results = calculate_statistics(params, simulated_prices, option_payoffs);
+    SimulationResults results = calculate_statistics(params, simulated_prices, option_payoffs, disc_payoffs);
     write_simulated_prices_to_csv(simulated_prices, option_payoffs);
 
     return results;
@@ -172,7 +198,8 @@ int main() {
     std::cout << "Standard Deviation: $" << results.std_dev << "\n";
     std::cout << "95% Value at Risk: " << results.var_95 * 100 << "%\n";
     std::cout << "Price Range: $" << results.min_price << " - $" << results.max_price << "\n";
-    std::cout << "Call Option Price: $" << results.option_price << "\n";
+    std::cout << "Call Option Price (plain MC): $" << results.option_price << "\n";
+    std::cout << "Call Option Price (control variate): $" << results.option_price_cv << "\n";
 
     return 0;
 }
