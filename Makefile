@@ -5,7 +5,7 @@ CXX      := clang++
 CXXFLAGS := -std=c++17 -O3 -ffast-math -march=native -I. $(OMP_CFLAGS)
 LDFLAGS  := $(OMP_LDFLAGS)
 
-SRC         := src/monte_carlo_cpu.cpp
+SRC         := src/main.cpp
 BUILD_DIR   := build
 TARGET      := $(BUILD_DIR)/monte_carlo
 OUTPUT      := output
