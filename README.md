@@ -1,6 +1,6 @@
 # Monte Carlo Option Simulator (GBM)
 
-High-throughput C++ Monte Carlo for European options under GBM, using xoshiro256** RNG and OpenMP parallel paths, plus a lightweight Plotly viewer for price-path fans.
+High-throughput C++ Monte Carlo Engine for European options under GBM, using **xoshiro256** RNG and OpenMP parallel paths, plus a lightweight Plotly viewer for price-path fans.
 
 ![Monte Carlo fan chart](docs/downsampled_fan_chart.png)
 
