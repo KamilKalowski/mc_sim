@@ -38,6 +38,11 @@ struct SimulationResults {
     double option_price; // Expected value of call option
 };
 
+struct PathResults {
+    double payoff_avg;
+    double terminal_avg;
+};
+
 void write_simulated_prices_to_csv(const std::vector<double>& simulated_prices, const std::vector<double>& payoffs) {
     std::ofstream out("./output/final_price_payoffs_output.csv");
     if (!out) {
@@ -87,8 +92,8 @@ SimulationResults calculate_statistics(const SimulationParams& params, std::vect
     return results;
 }
 
-double simulate_path(const SimulationParams& params, xoshiro256ss& rng, std::normal_distribution<>& normal_dist, std::ofstream* per_step_stream, int path) {
-    double price = params.initial_price;
+PathResults simulate_path(const SimulationParams& params, xoshiro256ss& rng, std::normal_distribution<>& normal_dist, std::ofstream* per_step_stream, int path) {
+    double price_pos = params.initial_price, price_neg = params.initial_price;
 
     // Pre-computing GBM invariants
     double drift = (params.risk_free_rate - .5 * params.volatility * params.volatility) * params.delta_t;
@@ -96,12 +101,21 @@ double simulate_path(const SimulationParams& params, xoshiro256ss& rng, std::nor
 
     for(int step = 0; step < params.steps; ++step) {
         double Z = normal_dist(rng);
-        price *= std::exp(drift + diffuse * Z);
+
+        // Antithetic Variates
+        double exp_pos = std::exp(drift + diffuse * Z);
+        double exp_neg = std::exp(drift - diffuse * Z);
+
+        price_pos *= exp_pos;
+        price_neg *= exp_neg;
         if (per_step_stream && step % 50 == 0) {
-            *per_step_stream << path << "," << step << "," << price << "\n";
+            *per_step_stream << path << "," << step << "," << price_pos << "\n";
         }
     }
-    return price;
+    double payoff_pos = std::max(price_pos - params.strike_price, 0.0);
+    double payoff_neg = std::max(price_neg - params.strike_price, 0.0);
+
+    return {.5 * (payoff_pos + payoff_neg), .5 * (price_pos + price_neg)};
 }
 
 SimulationResults run_simulation(const SimulationParams& params) {
@@ -117,16 +131,16 @@ SimulationResults run_simulation(const SimulationParams& params) {
 
     #pragma omp parallel
     {
-        xoshiro256ss rng(std::random_device{}());
+        xoshiro256ss rng(std::random_device{}() + omp_get_thread_num());
         std::normal_distribution<double> normal_dist(0.0, 1.0);
 
         auto t0 = clock::now();
         // Run simulations
         #pragma omp for
         for(int i = 0; i < NUM_PATHS; ++i) {
-            double final_price = simulate_path(params, rng, normal_dist, nullptr, i);
-            simulated_prices[i] = final_price;
-            option_payoffs[i] = std::max(final_price - params.strike_price, 0.0);
+            auto path_result = simulate_path(params, rng, normal_dist, nullptr, i);
+            simulated_prices[i] = path_result.terminal_avg;
+            option_payoffs[i] = path_result.payoff_avg;
         }
     }
 
